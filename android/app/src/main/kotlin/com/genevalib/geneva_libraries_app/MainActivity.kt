@@ -1,4 +1,4 @@
-package com.example.geneva_libraries_app
+package com.genevalib.geneva_libraries_app
 
 import io.flutter.embedding.android.FlutterActivity
 
