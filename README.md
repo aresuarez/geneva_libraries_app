@@ -1,16 +1,11 @@
-# flutter_application_1
+# geneva_libraries_app
 
-A new Flutter project.
+A simple mobile app developed with Flutter to see what libraries are open in Geneva at a certain time.
 
-## Getting Started
+## Description
 
-This project is a starting point for a Flutter application.
+The database for the libraries schedule is under assets/library_schedules.json
 
-A few resources to get you started if this is your first Flutter project:
+In case it is out of date, please open a PR and I will update it.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Run ``flutter pub run build_runner build --delete-conflicting-outputs`` for model related code generation.

@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/screens/home_screen.dart';
+import 'package:geneva_libraries_app/screens/home_screen.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 
@@ -15,13 +15,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Geneve Library Hours',
+      title: 'Geneva Library Hours',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const HomeScreen(title: 'Geneve Library Hours'),
+      home: const HomeScreen(title: 'Geneva Library Hours'),
     );
   }
 }
