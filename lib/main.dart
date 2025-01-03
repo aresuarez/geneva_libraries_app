@@ -1,11 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:geneva_libraries_app/screens/home_screen.dart';
-import 'package:timezone/data/latest.dart' as tz;
-
 
 void main() {
-  tz.initializeTimeZones();
   runApp(const MyApp());
 }
 
@@ -21,7 +17,10 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const HomeScreen(title: 'Geneva Library Hours'),
+      home: const HomeScreen(
+        title: 'Geneva Library Hours',
+        libraryService: null, // Use default service
+      ),
     );
   }
 }
