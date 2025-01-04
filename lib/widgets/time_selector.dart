@@ -3,42 +3,55 @@ import 'package:flutter/material.dart';
 
 class TimeSelector extends StatelessWidget {
   final TimeOfDay selectedTime;
+  final String selectedDay;
   final Function(TimeOfDay) onTimeChanged;
+  final Function(String) onDayChanged;
 
   const TimeSelector({
     super.key,
     required this.selectedTime,
+    required this.selectedDay,
     required this.onTimeChanged,
+    required this.onDayChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-      onPressed: () => _showTimePicker(context),
-      child: Text('Select Time'),
+      onPressed: () => _showDateTimePicker(context),
+      child: const Text('Select Date'),
     );
   }
 
-  void _showTimePicker(BuildContext context) {
+  void _showDateTimePicker(BuildContext context) {
     showCupertinoModalPopup(
       context: context,
       builder: (BuildContext context) {
         return Container(
-          height: 250,
+          height: 300,
           color: Colors.white,
-          child: CupertinoDatePicker(
-            mode: CupertinoDatePickerMode.time,
-            use24hFormat: true,
-            initialDateTime: DateTime(
-              DateTime.now().year,
-              DateTime.now().month,
-              DateTime.now().day,
-              selectedTime.hour,
-              selectedTime.minute,
-            ),
-            onDateTimeChanged: (DateTime newDateTime) {
-              onTimeChanged(TimeOfDay.fromDateTime(newDateTime));
-            },
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.dateAndTime,
+                  initialDateTime: DateTime.now(),
+                  use24hFormat: true,
+                  onDateTimeChanged: (DateTime newDateTime) {
+                    // Handle both date and time changes here
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },

@@ -28,44 +28,28 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _libraries = [];
   List<dynamic> _openLibraries = [];
   bool _timeSelected = false;
-  Timer? _updateTimer;
   bool _isLoading = true;
   String? _error;
-
-  void _startAutoUpdates() {
-    // Cancel any existing timer
-    _updateTimer?.cancel();
-    
-    // Calculate time until next minute
-    final now = Clock.now();
-    final nextMinute = DateTime(now.year, now.month, now.day, 
-                              now.hour, now.minute + 1);
-    final delay = nextMinute.difference(now);
-
-    // Schedule single update at next minute
-    _updateTimer = Timer(delay, () {
-      _updateCurrentTime();
-      // Then start periodic updates
-      _updateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-        _updateCurrentTime();
-      });
-    });
-  }
 
   @override
   void initState() {
     super.initState();
     _libraryService = widget.libraryService ?? LibraryService();
-    _updateCurrentTime();
+    // Load libraries once when app starts
     _loadLibrarySchedules();
-    _timeSelected = true;
-    _startAutoUpdates();
+    // Initialize time selection after libraries start loading
+    _initializeTimeSelection();
   }
 
-  @override
-  void dispose() {
-    _updateTimer?.cancel();
-    super.dispose();
+  void _initializeTimeSelection() {
+    final now = Clock.now();
+    final currentTime = TimeOfDay(hour: now.hour, minute: now.minute);
+    final currentDay = DateFormat('EEEE').format(now).toLowerCase();
+
+    setState(() {
+      _selectedTime = currentTime;
+      _selectedDay = currentDay;
+    });
   }
 
   void _updateCurrentTime() {
@@ -76,13 +60,16 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedTime = currentTime;
       _selectedDay = currentDay;
-      _timeSelected = true;
+      _timeSelected = false;
+      _openLibraries = [];
     });
 
-    _findOpenLibraries(currentTime, currentDay);
-    
-    // Restart auto updates when resetting to current time
-    _startAutoUpdates();
+    if (!_isLoading && _libraries.isNotEmpty && _error == null) {
+      _findOpenLibraries(currentTime, currentDay);
+      setState(() {
+        _timeSelected = true;
+      });
+    }
   }
 
   Future<void> _loadLibrarySchedules() async {
@@ -126,13 +113,19 @@ class _HomeScreenState extends State<HomeScreen> {
         final openMinutes = openTime.hour * 60 + openTime.minute;
         final closeMinutes = closeTime.hour * 60 + closeTime.minute;
 
-        // Check if the selected time falls within any time slot
-        if (closeMinutes > openMinutes) {
-          // Normal case (e.g., 9:00 - 17:00)
-          return selectedMinutes >= openMinutes && selectedMinutes < closeMinutes;
-        } else {
-          // Handles case when library closes after midnight
+        // Check if this is a midnight-crossing schedule
+        // This happens when the closing time is earlier than opening time
+        // For example: opens at 22:00 and closes at 02:00
+        final isMidnightCrossing = closeTime.hour < openTime.hour || 
+            (closeTime.hour == openTime.hour && closeTime.minute < openTime.minute);
+
+        if (isMidnightCrossing) {
+          // For midnight-crossing schedules, we need to check if the time is
+          // either after opening time OR before closing time
           return selectedMinutes >= openMinutes || selectedMinutes < closeMinutes;
+        } else {
+          // For normal schedules, time must be between opening and closing
+          return selectedMinutes >= openMinutes && selectedMinutes < closeMinutes;
         }
       });
     }).toList();
@@ -140,10 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
   void _onTimeChanged(TimeOfDay newTime) {
-    // Stop auto updates when user manually selects time
-    _updateTimer?.cancel();
-    _updateTimer = null;
-
     setState(() {
       _selectedTime = newTime;
       _timeSelected = true;
@@ -154,24 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onDayChanged(String? newValue) {
     if (newValue == null) return;
     
-    // Stop auto updates when user manually selects day
-    _updateTimer?.cancel();
-    _updateTimer = null;
-
     setState(() {
       _selectedDay = newValue;
     });
     _findOpenLibraries(_selectedTime, _selectedDay);
-  }
-
-  bool _isCurrentTimeAndDay() {
-    final now = Clock.now();
-    final currentTime = TimeOfDay(hour: now.hour, minute: now.minute);
-    final currentDay = DateFormat('EEEE').format(now).toLowerCase();
-    
-    return _selectedTime.hour == currentTime.hour && 
-           _selectedTime.minute == currentTime.minute &&
-           _selectedDay == currentDay;
   }
 
   TimeOfDay? _getNextClosingTime(dynamic schedule, int selectedMinutes) {
@@ -185,26 +160,48 @@ class _HomeScreenState extends State<HomeScreen> {
         hour: int.parse(timeSlot.close.split(':')[0]),
         minute: int.parse(timeSlot.close.split(':')[1]),
       );
+      final openTime = TimeOfDay(
+        hour: int.parse(timeSlot.open.split(':')[0]),
+        minute: int.parse(timeSlot.open.split(':')[1]),
+      );
+      
       final closeMinutes = closeTime.hour * 60 + closeTime.minute;
+      final openMinutes = openTime.hour * 60 + openTime.minute;
       
-      // Handle after-midnight case
-      final adjustedCloseMinutes = closeMinutes < selectedMinutes ? 
-          closeMinutes + 24 * 60 : closeMinutes;
+      // Determine if this slot crosses midnight
+      final isNextDayClosing = closeMinutes < openMinutes;
       
-      if (adjustedCloseMinutes > selectedMinutes) {
-        final diff = adjustedCloseMinutes - selectedMinutes;
-        if (closestDiff == null || diff < closestDiff) {
-          closestDiff = diff;
-          nextClosing = closeTime;
+      // Calculate the difference between closing time and selected time
+      int diff;
+      if (isNextDayClosing) {
+        // For slots crossing midnight, we need to handle two cases:
+        if (selectedMinutes >= openMinutes) {
+          // Case 1: Selected time is after opening (same day)
+          diff = (closeMinutes + 24 * 60) - selectedMinutes;
+        } else if (selectedMinutes < closeMinutes) {
+          // Case 2: Selected time is after midnight but before closing
+          diff = closeMinutes - selectedMinutes;
+        } else {
+          // Selected time is outside the slot
+          continue;
         }
+      } else {
+        // Normal case (same day slot)
+        if (selectedMinutes > closeMinutes || selectedMinutes < openMinutes) {
+          // Selected time is outside the slot
+          continue;
+        }
+        diff = closeMinutes - selectedMinutes;
+      }
+      
+      // Update the next closing time if this is the closest one
+      if (diff >= 0 && (closestDiff == null || diff < closestDiff)) {
+        closestDiff = diff;
+        nextClosing = closeTime;
       }
     }
+    
     return nextClosing;
-  }
-
-  String _capitalizeDay(String day) {
-    if (day.isEmpty) return day;
-    return '${day[0].toUpperCase()}${day.substring(1)}';
   }
 
   @override
@@ -215,12 +212,11 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: Colors.white,
         backgroundColor: Colors.blueAccent,
       ),
-      floatingActionButton: !_isCurrentTimeAndDay()
-          ? FloatingActionButton(
-              onPressed: _updateCurrentTime,
-              child: const Icon(Icons.restore),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _updateCurrentTime,
+        tooltip: 'Reset to current time',
+        child: const Icon(Icons.restore),
+      ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : _error != null
@@ -228,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_error!, style: TextStyle(color: Colors.red)),
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
                   ElevatedButton(
                     onPressed: _loadLibrarySchedules,
                     child: const Text('Retry'),
@@ -242,32 +238,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    DropdownButton<String>(
-                      value: _selectedDay,
-                      onChanged: _onDayChanged,
-                      items: <String>[
-                        'monday',
-                        'tuesday',
-                        'wednesday',
-                        'thursday',
-                        'friday',
-                        'saturday',
-                        'sunday'
-                      ].map<DropdownMenuItem<String>>((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(_capitalizeDay(value)),
-                        );
-                      }).toList(),
-                    ),
                     TimeSelector(
                       selectedTime: _selectedTime,
+                      selectedDay: _selectedDay,
                       onTimeChanged: _onTimeChanged,
+                      onDayChanged: (day) => _onDayChanged(day),
                     ),
                     const SizedBox(height: 20),
                     Expanded(
                       child: _openLibraries.isEmpty && _timeSelected
-                          ? Center(child: Text('No libraries open at this time.'))
+                          ? const Center(child: Text('No libraries open at this time.'))
                           : ListView.builder(
                               itemCount: _openLibraries.length,
                               itemBuilder: (context, index) {
@@ -278,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                 return ListTile(
                                   title: Text(
-                                    '${library.name} - until ${nextClosing?.format(context) ?? "unknown"}',
+                                    '${library.name} - until ${nextClosing != null ? MaterialLocalizations.of(context).formatTimeOfDay(nextClosing, alwaysUse24HourFormat: true) : "unknown"}',
                                   ),
                                 );
                               },

@@ -30,7 +30,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: HomeScreen(
-        title: 'Geneva Library Hours',
+        title: 'Geneva Library Opening Hours',
         libraryService: mockLibraryService,
       ),
     ));
@@ -47,10 +47,10 @@ void main() {
   }
 
   testWidgets('Shows library schedule correctly', (WidgetTester tester) async {
-    final mockLibrary = Library(
+    final mockLibrary = const Library(
       name: 'Test Library',
       schedule: {
-        'monday': Schedule(timeSlots: [
+        'monday':  Schedule(timeSlots: [
           TimeSlot(open: '09:00', close: '12:00'),
           TimeSlot(open: '14:00', close: '17:00'),
         ]),
@@ -58,8 +58,8 @@ void main() {
     );
 
     await pumpHomeScreen(tester, libraries: [mockLibrary]);
-    expect(find.text('Geneva Library Hours'), findsOneWidget);
-    expect(find.text('Select Time'), findsOneWidget);
+    expect(find.text('Geneva Library Opening Hours'), findsOneWidget);
+    expect(find.text('Select Date'), findsOneWidget);
     await cleanupTest(tester);
   });
 
@@ -76,7 +76,7 @@ void main() {
   });
 
   testWidgets('Shows no open libraries message', (WidgetTester tester) async {
-    final mockLibrary = Library(
+    final mockLibrary = const Library(
       name: 'Test Library',
       schedule: {
         'monday': Schedule(timeSlots: [
@@ -87,9 +87,16 @@ void main() {
 
     await pumpHomeScreen(tester, libraries: [mockLibrary]);
 
-    // Change time to morning when library is closed
-    final timeSelector = tester.widget<TimeSelector>(find.byType(TimeSelector));
-    timeSelector.onTimeChanged(const TimeOfDay(hour: 10, minute: 0));
+    // Find and tap the time selector
+    await tester.tap(find.byType(TimeSelector));
+    await tester.pumpAndSettle();
+
+    // Simulate selecting 10:00 AM from time picker
+    await tester.tap(find.text('10')); // Select hour
+    await tester.pumpAndSettle();
+    
+    // Tap the confirm button instead of tapping at offset
+    await tester.tap(find.text('Confirm'));
     await tester.pumpAndSettle();
 
     expect(find.text('No libraries open at this time.'), findsOneWidget);
@@ -97,9 +104,41 @@ void main() {
     await cleanupTest(tester);
   });
 
-  testWidgets('Shows restore button when time changes', (WidgetTester tester) async {
-    await pumpHomeScreen(tester);
-    expect(find.byIcon(Icons.restore), findsNothing);
+  testWidgets('Shows restore button and it resets time when pressed', (WidgetTester tester) async {
+    final mockLibrary = const Library(
+      name: 'Test Library',
+      schedule: {
+        'monday': Schedule(timeSlots: [
+          TimeSlot(open: '09:00', close: '13:00'),
+        ]),
+      },
+    );
+
+    await pumpHomeScreen(tester, libraries: [mockLibrary]);
+    
+    // Restore button should always be visible
+    expect(find.byIcon(Icons.restore), findsOneWidget);
+    
+    // Change time to 14:00
+    await tester.tap(find.byType(TimeSelector));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('14')); 
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+    
+    // Press restore button
+    await tester.tap(find.byIcon(Icons.restore));
+    await tester.pumpAndSettle();
+    
+    // Verify library is shown (meaning we're back to 10:00 when library is open)
+    final libraryTile = find.byWidgetPredicate((widget) => 
+      widget is Text && 
+      widget.data!.startsWith('Test Library') && 
+      (widget.data!.contains('1:00 PM') || widget.data!.contains('13:00'))
+    );
+    expect(libraryTile, findsOneWidget);
+    
     await cleanupTest(tester);
   });
 }
